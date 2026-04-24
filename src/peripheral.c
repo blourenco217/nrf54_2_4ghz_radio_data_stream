@@ -5,57 +5,71 @@
  */
 
 #include <zephyr/kernel.h>
-#include <nrf.h>
+#include <esb.h>
 
 #include "conn_time_sync.h"
 
-#if defined(RADIO_SHORTS_END_DISABLE_Msk)
-#define RADIO_TX_DISABLE_SHORT RADIO_SHORTS_END_DISABLE_Msk
-#elif defined(RADIO_SHORTS_PHYEND_DISABLE_Msk)
-#define RADIO_TX_DISABLE_SHORT RADIO_SHORTS_PHYEND_DISABLE_Msk
-#else
-#error "No supported radio TX disable shortcut for this SoC"
-#endif
+static volatile bool tx_ready = true;
 
-static struct radio_payload radio_tx_packet __aligned(4);
-
-static void send_packet(uint8_t value)
+static void event_handler(struct esb_evt const *event)
 {
-	radio_tx_packet.value = value;
-	NRF_RADIO->PACKETPTR = (uint32_t)&radio_tx_packet;
-	NRF_RADIO->EVENTS_END = 0;
-	NRF_RADIO->EVENTS_DISABLED = 0;
-	NRF_RADIO->TASKS_TXEN = 1;
-
-	while (!NRF_RADIO->EVENTS_END) {
-		k_busy_wait(10);
-	}
-
-	while (!NRF_RADIO->EVENTS_DISABLED) {
-		k_busy_wait(10);
+	switch (event->evt_id) {
+	case ESB_EVENT_TX_SUCCESS:
+	case ESB_EVENT_TX_FAILED:
+		tx_ready = true;
+		break;
+	case ESB_EVENT_RX_RECEIVED:
+		break;
 	}
 }
 
 void peripheral_start(void)
 {
+	int err;
+	struct esb_payload payload = {0};
+	uint8_t sequence = 0;
 	uint8_t value = RADIO_VALUE_MIN;
 
-	printk("Starting peripheral raw TX on %u MHz\n",
-	       RADIO_FREQUENCY_MHZ + RADIO_CHANNEL);
+	printk("Starting peripheral ESB TX on %u MHz\n",
+	       RADIO_FREQUENCY_MHZ + ESB_CHANNEL);
 
 	if (radio_hf_clock_start() != 0) {
-		printk("Failed to start the HF clock for radio TX\n");
+		printk("Failed to start the HF clock for ESB TX\n");
 		return;
 	}
 
-	radio_configure_common();
-	NRF_RADIO->SHORTS = RADIO_SHORTS_TXREADY_START_Msk |
-			    RADIO_TX_DISABLE_SHORT;
+	err = esb_link_init(ESB_MODE_PTX, event_handler);
+	if (err) {
+		printk("ESB init failed: %d\n", err);
+		return;
+	}
+
+	payload.length = ESB_PAYLOAD_LENGTH;
+	payload.pipe = ESB_PIPE;
+	payload.noack = 1;
 
 	while (1) {
-		send_packet(value);
-		printk("TX value=%u\n", value);
+		if (!tx_ready) {
+			k_sleep(K_MSEC(10));
+			continue;
+		}
 
+		payload.data[ESB_SEQUENCE_INDEX] = sequence;
+		payload.data[ESB_VALUE_INDEX] = value;
+
+		tx_ready = false;
+		esb_flush_tx();
+		err = esb_write_payload(&payload);
+		if (err) {
+			tx_ready = true;
+			printk("ESB TX enqueue failed: %d\n", err);
+			k_sleep(K_MSEC(100));
+			continue;
+		}
+
+		printk("TX seq=%u value=%u\n", sequence, value);
+
+		sequence++;
 		value++;
 		if (value > RADIO_VALUE_MAX) {
 			value = RADIO_VALUE_MIN;

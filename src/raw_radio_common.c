@@ -9,6 +9,7 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 #include <zephyr/kernel.h>
+#include <esb.h>
 #include <nrf.h>
 #include <nrf_erratas.h>
 
@@ -98,23 +99,46 @@ int radio_hf_clock_start(void)
 #endif
 }
 
-void radio_configure_common(void)
+int esb_link_init(enum esb_mode mode, esb_event_handler event_handler)
 {
-	NRF_RADIO->SHORTS = 0;
-	NRF_RADIO->CRCCNF = 0;
-	NRF_RADIO->MODE = RADIO_MODE_MODE_Nrf_1Mbit;
-	NRF_RADIO->TXPOWER = RADIO_TX_POWER;
-	NRF_RADIO->FREQUENCY = RADIO_CHANNEL;
-	NRF_RADIO->BASE0 = RADIO_BASE_ADDRESS;
-	NRF_RADIO->PREFIX0 = RADIO_ADDRESS_PREFIX;
-	NRF_RADIO->TXADDRESS = 0;
-	NRF_RADIO->RXADDRESSES = BIT(0);
-	NRF_RADIO->PCNF0 = (8 << RADIO_PCNF0_PLEN_Pos);
-	NRF_RADIO->PCNF1 =
-		((uint32_t)sizeof(struct radio_payload) << RADIO_PCNF1_MAXLEN_Pos) |
-		((uint32_t)sizeof(struct radio_payload) << RADIO_PCNF1_STATLEN_Pos) |
-		(0U << RADIO_PCNF1_BALEN_Pos);
-	NRF_RADIO->EVENTS_READY = 0;
-	NRF_RADIO->EVENTS_END = 0;
-	NRF_RADIO->EVENTS_DISABLED = 0;
+	int err;
+	uint8_t base_addr_0[4] = {0xE7, 0xE7, 0xE7, 0xE7};
+	uint8_t base_addr_1[4] = {0xC2, 0xC2, 0xC2, 0xC2};
+	uint8_t addr_prefix[8] = {0xE7, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8};
+	struct esb_config config = ESB_DEFAULT_CONFIG;
+
+	config.protocol = ESB_PROTOCOL_ESB;
+	config.mode = mode;
+	config.event_handler = event_handler;
+	config.bitrate = ESB_BITRATE_1MBPS;
+	config.payload_length = ESB_PAYLOAD_LENGTH;
+	config.selective_auto_ack = false;
+	config.retransmit_count = 0;
+
+	err = esb_init(&config);
+	if (err) {
+		return err;
+	}
+
+	err = esb_set_base_address_0(base_addr_0);
+	if (err) {
+		return err;
+	}
+
+	err = esb_set_base_address_1(base_addr_1);
+	if (err) {
+		return err;
+	}
+
+	err = esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
+	if (err) {
+		return err;
+	}
+
+	err = esb_set_rf_channel(ESB_CHANNEL);
+	if (err) {
+		return err;
+	}
+
+	return 0;
 }

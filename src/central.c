@@ -5,48 +5,72 @@
  */
 
 #include <zephyr/kernel.h>
-#include <nrf.h>
+#include <esb.h>
 
 #include "conn_time_sync.h"
 
-static struct radio_payload radio_rx_packet __aligned(4);
-
-void central_start(void)
+static void event_handler(struct esb_evt const *event)
 {
-	uint32_t packets_received = 0;
+	struct esb_payload payload;
 
-	printk("Starting central raw RX on %u MHz\n",
-	       RADIO_FREQUENCY_MHZ + RADIO_CHANNEL);
-
-	if (radio_hf_clock_start() != 0) {
-		printk("Failed to start the HF clock for radio RX\n");
+	if (event->evt_id != ESB_EVENT_RX_RECEIVED) {
 		return;
 	}
 
-	radio_configure_common();
-	NRF_RADIO->PACKETPTR = (uint32_t)&radio_rx_packet;
-	NRF_RADIO->SHORTS = RADIO_SHORTS_RXREADY_START_Msk |
-			    RADIO_SHORTS_END_START_Msk;
-	NRF_RADIO->TASKS_RXEN = 1;
+	while (esb_read_rx_payload(&payload) == 0) {
+		static uint32_t packets_received;
+		static uint8_t expected_sequence;
+		uint8_t sequence;
+		uint8_t value;
 
-	printk("Listening for values %u..%u on channel %u\n",
-	       RADIO_VALUE_MIN, RADIO_VALUE_MAX, RADIO_CHANNEL);
+		if (payload.length != ESB_PAYLOAD_LENGTH) {
+			continue;
+		}
+
+		sequence = payload.data[ESB_SEQUENCE_INDEX];
+		value = payload.data[ESB_VALUE_INDEX];
+		if (!radio_value_is_valid(value)) {
+			continue;
+		}
+
+		packets_received++;
+		printk("RX[%u] seq=%u value=%u%s\n",
+		       packets_received,
+		       sequence,
+		       value,
+		       (sequence == expected_sequence) ? "" : " (seq jump)");
+		expected_sequence = (uint8_t)(sequence + 1U);
+	}
+}
+
+void central_start(void)
+{
+	int err;
+
+	printk("Starting central ESB RX on %u MHz\n",
+	       RADIO_FREQUENCY_MHZ + ESB_CHANNEL);
+
+	if (radio_hf_clock_start() != 0) {
+		printk("Failed to start the HF clock for ESB RX\n");
+		return;
+	}
+
+	err = esb_link_init(ESB_MODE_PRX, event_handler);
+	if (err) {
+		printk("ESB init failed: %d\n", err);
+		return;
+	}
+
+	err = esb_start_rx();
+	if (err) {
+		printk("ESB RX start failed: %d\n", err);
+		return;
+	}
+
+	printk("Listening for ESB values %u..%u on channel %u\n",
+	       RADIO_VALUE_MIN, RADIO_VALUE_MAX, ESB_CHANNEL);
 
 	while (1) {
-		if (NRF_RADIO->EVENTS_END) {
-			uint8_t value = radio_rx_packet.value;
-
-			NRF_RADIO->EVENTS_END = 0;
-
-			if (radio_value_is_valid(value)) {
-				packets_received++;
-				printk("RX[%u] value=%u\n", packets_received, value);
-			}
-			// } else {
-			// 	printk("RX ignored invalid value=%u\n", value);
-			// }
-		} else {
-			k_sleep(K_MSEC(1));
-		}
+		k_sleep(K_SECONDS(1));
 	}
 }
