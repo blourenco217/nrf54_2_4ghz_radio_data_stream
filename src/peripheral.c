@@ -10,6 +10,10 @@
 #include "conn_time_sync.h"
 
 static volatile bool tx_ready = true;
+static struct radio_packet tx_packet = {
+	.sequence = 0,
+	.value = RADIO_VALUE_MIN,
+};
 
 static void event_handler(struct esb_evt const *event)
 {
@@ -27,8 +31,6 @@ void peripheral_start(void)
 {
 	int err;
 	struct esb_payload payload = {0};
-	uint8_t sequence = 0;
-	uint8_t value = RADIO_VALUE_MIN;
 
 	printk("Starting peripheral ESB TX on %u MHz\n",
 	       RADIO_FREQUENCY_MHZ + ESB_CHANNEL);
@@ -44,19 +46,14 @@ void peripheral_start(void)
 		return;
 	}
 
-	payload.length = ESB_PAYLOAD_LENGTH;
-	payload.pipe = ESB_PIPE;
-	payload.noack = 1;
-
 	while (1) {
 		if (!tx_ready) {
 			k_sleep(K_MSEC(10));
 			continue;
 		}
 
-		payload.data[ESB_SEQUENCE_INDEX] = sequence;
-		payload.data[ESB_VALUE_INDEX] = value;
-
+		payload.noack = 1;
+		radio_packet_encode(&payload, &tx_packet);
 		tx_ready = false;
 		esb_flush_tx();
 		err = esb_write_payload(&payload);
@@ -67,12 +64,12 @@ void peripheral_start(void)
 			continue;
 		}
 
-		printk("TX seq=%u value=%u\n", sequence, value);
+		printk("TX seq=%u value=%u\n", tx_packet.sequence, tx_packet.value);
 
-		sequence++;
-		value++;
-		if (value > RADIO_VALUE_MAX) {
-			value = RADIO_VALUE_MIN;
+		tx_packet.sequence++;
+		tx_packet.value++;
+		if (tx_packet.value > RADIO_VALUE_MAX) {
+			tx_packet.value = RADIO_VALUE_MIN;
 		}
 
 		k_sleep(K_MSEC(RADIO_SEND_INTERVAL_MS));

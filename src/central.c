@@ -9,37 +9,32 @@
 
 #include "conn_time_sync.h"
 
+static struct {
+	uint32_t received_count;
+	uint8_t expected_sequence;
+} rx_state;
+
 static void event_handler(struct esb_evt const *event)
 {
 	struct esb_payload payload;
+	struct radio_packet packet;
 
 	if (event->evt_id != ESB_EVENT_RX_RECEIVED) {
 		return;
 	}
 
 	while (esb_read_rx_payload(&payload) == 0) {
-		static uint32_t packets_received;
-		static uint8_t expected_sequence;
-		uint8_t sequence;
-		uint8_t value;
-
-		if (payload.length != ESB_PAYLOAD_LENGTH) {
+		if (!radio_packet_decode(&payload, &packet)) {
 			continue;
 		}
 
-		sequence = payload.data[ESB_SEQUENCE_INDEX];
-		value = payload.data[ESB_VALUE_INDEX];
-		if (!radio_value_is_valid(value)) {
-			continue;
-		}
-
-		packets_received++;
+		rx_state.received_count++;
 		printk("RX[%u] seq=%u value=%u%s\n",
-		       packets_received,
-		       sequence,
-		       value,
-		       (sequence == expected_sequence) ? "" : " (seq jump)");
-		expected_sequence = (uint8_t)(sequence + 1U);
+		       rx_state.received_count,
+		       packet.sequence,
+		       packet.value,
+		       (packet.sequence == rx_state.expected_sequence) ? "" : " (seq jump)");
+		rx_state.expected_sequence = (uint8_t)(packet.sequence + 1U);
 	}
 }
 

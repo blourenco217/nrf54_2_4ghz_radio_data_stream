@@ -1,7 +1,5 @@
 /*
- * Copyright (c) 2024 Nordic Semiconductor ASA
- *
- * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ * Shared ESB clock and link setup for the central/peripheral demo.
  */
 
 #include <zephyr/device.h>
@@ -111,7 +109,7 @@ int esb_link_init(enum esb_mode mode, esb_event_handler event_handler)
 	config.mode = mode;
 	config.event_handler = event_handler;
 	config.bitrate = ESB_BITRATE_1MBPS;
-	config.payload_length = ESB_PAYLOAD_LENGTH;
+	config.payload_length = sizeof(struct radio_packet);
 	config.selective_auto_ack = false;
 	config.retransmit_count = 0;
 
