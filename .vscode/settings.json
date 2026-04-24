@@ -1,0 +1,6 @@
+{
+    "nrf-connect.debugging.bindings": {
+        "${workspaceFolder}/build": "Launch 2_4ghz_test/build",
+        "${workspaceFolder}/build/2_4ghz_test": "Launch 2_4ghz_test/build/2_4ghz_test"
+    }
+}

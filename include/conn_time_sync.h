@@ -9,46 +9,31 @@
 
 /**
  * @file
- * @defgroup conn_time_sync Definitions for the connection time sync sample.
+ * @defgroup conn_time_sync Definitions for the 2.4 GHz raw radio sample.
  * @{
- * @brief Definitions for the connection time sync sample.
+ * @brief Definitions for the 2.4 GHz raw radio sample.
  *
- * This file contains common definitions and API declarations
- * used by the sample.
+ * This file contains common definitions for raw radio communication.
  */
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <zephyr/kernel.h>
 
-/** @brief Connection time sync service UUID (unified service for time sync + data) */
-#define BT_UUID_CONN_TIME_SYNC_SERVICE_VAL \
-	BT_UUID_128_ENCODE(0xA88278D0, 0x7009, 0x4BEE, 0xA6F8, 0xE1DC3FF02B92)
-#define BT_UUID_CONN_TIME_SYNC_SERVICE \
-	BT_UUID_DECLARE_128(BT_UUID_CONN_TIME_SYNC_SERVICE_VAL)
+/* 2.4 GHz Radio Configuration */
+#define RADIO_FREQUENCY_MHZ     2400
+#define RADIO_CHANNEL           10
+#define RADIO_TX_POWER          0
+#define RADIO_ADDRESS_PREFIX    0xA8
+#define RADIO_BASE_ADDRESS      0x00000000
+#define RADIO_SEND_INTERVAL_MS  1000
+#define RADIO_VALUE_MIN         1
+#define RADIO_VALUE_MAX         10
 
-/** @brief Legacy alias for unified service */
-#define BT_UUID_TIMED_ACTION_SERVICE_VAL BT_UUID_CONN_TIME_SYNC_SERVICE_VAL
-#define BT_UUID_TIMED_ACTION_SERVICE BT_UUID_CONN_TIME_SYNC_SERVICE
-
-/** @brief Legacy alias for data service (now part of unified service) */
-#define BT_UUID_DATA_SERVICE_VAL BT_UUID_CONN_TIME_SYNC_SERVICE_VAL
-#define BT_UUID_DATA_SERVICE BT_UUID_CONN_TIME_SYNC_SERVICE
-
-/** @brief Timed action characteristic UUID */
-#define BT_UUID_TIMED_ACTION_CHAR_VAL \
-	BT_UUID_128_ENCODE(0xA88278D1, 0x7009, 0x4BEE, 0xA6F8, 0xE1DC3FF02B92)
-#define BT_UUID_TIMED_ACTION_CHAR \
-	BT_UUID_DECLARE_128(BT_UUID_TIMED_ACTION_CHAR_VAL)
-
-/** @brief Data notification characteristic UUID */
-#define BT_UUID_DATA_NOTIFY_CHAR_VAL \
-	BT_UUID_128_ENCODE(0xA88278D2, 0x7009, 0x4BEE, 0xA6F8, 0xE1DC3FF02B92)
-#define BT_UUID_DATA_NOTIFY_CHAR \
-	BT_UUID_DECLARE_128(BT_UUID_DATA_NOTIFY_CHAR_VAL)
-
-/** @brief Connection interval in units of 1.25ms (6 = 7.5ms for max throughput) */
-#define CONN_INTERVAL_UNITS 6
+/* Raw radio packet stored in RAM. The on-air address comes from BASE0/PREFIX0. */
+struct radio_payload {
+	uint8_t value;
+} __packed;
 
 /** @brief Start central demo. */
 void central_start(void);
@@ -56,88 +41,22 @@ void central_start(void);
 /** @brief Start peripheral demo. */
 void peripheral_start(void);
 
-/** @brief The timed action message
- *
- * The timed action message represents the information
- * sent from the central to the peripheral to allow time synchronization.
- * The anchor point information is the common time reference between
- * the central and peripheral.
- *
- * This samples transmits the anchor point time and trigger time
- * in a single packet. Other applications may consider sending those
- * separately.
- */
-struct timed_action {
-	uint64_t anchor_point_us_central_clock;
-	uint16_t anchor_point_event_counter;
-	uint64_t trigger_time_us_central_clock;
-	bool led_value;
-} __packed;
+/** @brief Start the high-frequency clock required by the radio. */
+int radio_hf_clock_start(void);
 
-static inline void timed_action_print(struct timed_action *action)
+/** @brief Apply the shared raw-radio configuration used by TX and RX. */
+void radio_configure_common(void);
+
+static inline bool radio_value_is_valid(uint8_t value)
 {
-	printk("c_anchor point (time=%llu, counter=%u), c_trigger_time %llu, value %d\n",
-		action->anchor_point_us_central_clock,
-		action->anchor_point_event_counter,
-		action->trigger_time_us_central_clock,
-		action->led_value);
+	return (value >= RADIO_VALUE_MIN) && (value <= RADIO_VALUE_MAX);
 }
-
-/** @brief Simple data notification from peripheral to central
- *
- * This structure contains a simple integer value (1-10) sent from
- * peripheral to central via BLE notifications.
- */
-struct peripheral_data {
-	uint8_t value;              /* 1 byte - integer value 1-10 */
-} __packed;
-
-static inline void peripheral_data_print(struct peripheral_data *data, uint8_t conn_index)
-{
-	printk("DATA from peer %u: value=%u\n", conn_index, data->value);
-}
-
-/** @brief Obtain the current Bluetooth controller time.
- *
- * The timestamps are based upon this clock.
- *
- * @return The current controller time.
- */
-uint64_t controller_time_us_get(void);
-
-/** @brief Get the current system time in microseconds.
- *
- * @return The current system time.
- */
-uint64_t system_time_us_get(void);
-
-/** @brief Set the controller to trigger a PPI event at the given timestamp.
- *
- * @param timestamp_us The timestamp where it will trigger.
- */
-void controller_time_trigger_set(uint64_t timestamp_us);
-
-/** @brief Get the address of the event that will trigger.
- *
- * @return The address of the event that will trigger.
- */
-uint32_t controller_time_trigger_event_addr_get(void);
-
-/** @brief Initialize the module handling timed toggling of an LED.
- *
- * @return 0 on success, failure otherwise.
- */
-int timed_led_toggle_init(void);
-
-/** @brief Toggle the LED using the given value at the given timestamp.
- *
- * @param value The LED value.
- * @param timestamp_us The time when the LED will be set, in microseconds.
- *                     The time is specified in controller clock units.
- */
-void timed_led_toggle_trigger_at(uint8_t value, uint32_t timestamp_us);
 
 #endif
+
+/**
+ * @}
+ */
 
 /**
  * @}

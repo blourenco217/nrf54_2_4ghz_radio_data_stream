@@ -1,0 +1,19 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "nrf-connect",
+			"request": "launch",
+			"name": "Launch 2_4ghz_test/build",
+			"config": "${workspaceFolder}/build",
+			"runToEntryPoint": "main"
+		},
+		{
+			"type": "nrf-connect",
+			"request": "launch",
+			"name": "Launch 2_4ghz_test/build/2_4ghz_test",
+			"config": "${workspaceFolder}/build/2_4ghz_test",
+			"runToEntryPoint": "main"
+		}
+	]
+}

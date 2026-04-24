@@ -25,12 +25,12 @@ int main(void)
 		switch (role) {
 		case 'p':
 		case 'P':
-			printk("Peripheral. Starting advertising\n");
+			printk("Peripheral. Starting raw radio transmitter\n");
 			peripheral_start();
 			break;
 		case 'c':
 		case 'C':
-			printk("Central. Starting scanning\n");
+			printk("Central. Starting raw radio receiver\n");
 			central_start();
 			break;
 		case '\n':
